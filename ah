@@ -1,0 +1,50 @@
+#!/bin/bash
+
+set -euo pipefail
+
+[[ "${1:-}" ]] || {
+    echo Existing environments:
+    ( cd envs ; du -sh * )
+    exit 0
+}
+
+if [[ $1 = recurse ]]; then
+    AH_DATADIR=$2
+    AH_USERHOME=$3
+    AH_USER=$4
+    AH_XDG_RUNTIME_DIR=$5
+    mount --bind $AH_USERHOME/.config/pulse $AH_DATADIR/.config/pulse
+    mount --rbind $AH_DATADIR $AH_USERHOME
+    mount -o remount,nosuid /
+    exec sudo -i -u $AH_USER DBUS_SESSION_BUS_ADDRESS=unix:path=$AH_XDG_RUNTIME_DIR/bus XDG_RUNTIME_DIR=$AH_XDG_RUNTIME_DIR bash
+    exit 1
+fi
+
+AH_ENV=$1
+AH_DATADIR=$PWD/envs/$AH_ENV
+
+[[ -d $AH_DATADIR ]] || { echo "Environment doesn't exist yet, you can create it with 'mkdir -p $AH_DATADIR'" ; exit 1 ; }
+
+mkdir -p $AH_DATADIR/.config/pulse
+
+# TODO: somehow defend against hash collisions, at least check e.g. routing table
+IP_HASH=$(echo -n $AH_ENV | sha256sum)
+IP_END=$(perl -e "print(hex('${IP_HASH:0:2}') . '.' . hex('${IP_HASH:2:2}'))")
+
+echo "All checks passed, if all goes well you get new shell inside with IP 100.110.$IP_END"
+
+sudo ip netns add sih-$AH_ENV
+sudo ip link add sih-$AH_ENV type veth peer name sih-$AH_ENV-peer
+sudo ip link set sih-$AH_ENV-peer netns sih-$AH_ENV
+sudo ip addr add 100.110.0.1/32 dev sih-$AH_ENV
+sudo ip link set sih-$AH_ENV up
+sudo ip ro add 100.110.$IP_END dev sih-$AH_ENV
+sudo ip netns exec sih-$AH_ENV ip addr add 127.0.0.1/8 dev lo
+sudo ip netns exec sih-$AH_ENV ip link set lo up
+sudo ip netns exec sih-$AH_ENV ip addr add 100.110.$IP_END/32 dev sih-$AH_ENV-peer
+sudo ip netns exec sih-$AH_ENV ip link set sih-$AH_ENV-peer up
+sudo ip netns exec sih-$AH_ENV ip ro add 100.110.0.1 dev sih-$AH_ENV-peer
+sudo ip netns exec sih-$AH_ENV ip ro add default via 100.110.0.1
+sudo ip netns exec sih-$AH_ENV unshare --mount-proc -p -f -m $0 recurse $AH_DATADIR $HOME $USER $XDG_RUNTIME_DIR || true
+sudo ip link del sih-$AH_ENV
+sudo ip netns del sih-$AH_ENV
