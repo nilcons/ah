@@ -33,6 +33,11 @@ mkdir -p $AH_DATADIR/.config/pulse
 IP_HASH=$(echo -n $AH_ENV | sha256sum)
 IP_END=$(perl -e "print(hex('${IP_HASH:0:2}') . '.' . hex('${IP_HASH:2:2}'))")
 
+if [[ "$( /usr/sbin/sysctl -n net.ipv4.ip_forward )" != "1" ]]; then
+    echo >&2 'Please enable ip forwarding with "/usr/sbin/sysctl -w net.ipv4.ip_forward=1".'
+    exit 1
+fi
+
 echo "All checks passed, if all goes well you get new shell inside with IP 100.110.$IP_END"
 
 sudo ip netns add sih-$AH_ENV
@@ -47,6 +52,10 @@ sudo ip netns exec sih-$AH_ENV ip addr add 100.110.$IP_END/32 dev sih-$AH_ENV-pe
 sudo ip netns exec sih-$AH_ENV ip link set sih-$AH_ENV-peer up
 sudo ip netns exec sih-$AH_ENV ip ro add 100.110.0.1 dev sih-$AH_ENV-peer
 sudo ip netns exec sih-$AH_ENV ip ro add default via 100.110.0.1
+sudo iptables -I FORWARD -j ACCEPT -s 100.110.$IP_END
+sudo iptables -t nat -I POSTROUTING -j MASQUERADE -s 100.110.$IP_END
 sudo ip netns exec sih-$AH_ENV unshare --mount-proc -p -f -m $0 recurse $AH_DATADIR $HOME $USER $XDG_RUNTIME_DIR || true
+sudo iptables -D FORWARD -j ACCEPT -s 100.110.$IP_END
+sudo iptables -t nat -D POSTROUTING -j MASQUERADE -s 100.110.$IP_END
 sudo ip link del sih-$AH_ENV
 sudo ip netns del sih-$AH_ENV

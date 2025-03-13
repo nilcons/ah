@@ -10,12 +10,6 @@ TCP dumping stuff on noisy desktops.
 
 Debugging stuff that "tarbombs" your home directory on first run (e.g. bazel).
 
-# Networking
-
-    sudo sysctl -w net.ipv4.ip_forward=1
-    sudo iptables -I FORWARD -j ACCEPT -s 100.110.0.0/16
-    sudo iptables -t nat -I POSTROUTING -j MASQUERADE -s 100.110.0.0/16
-
 # TODO
 
 IPv6
