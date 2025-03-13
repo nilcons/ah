@@ -4,6 +4,7 @@ set -euo pipefail
 
 [[ "${1:-}" ]] || {
     echo Existing environments:
+    # TODO: if-then-else for no environment
     ( cd envs ; du -sh * )
     exit 0
 }
@@ -13,9 +14,10 @@ if [[ $1 = recurse ]]; then
     AH_USERHOME=$3
     AH_USER=$4
     AH_XDG_RUNTIME_DIR=$5
-    mount --bind $AH_USERHOME/.config/pulse $AH_DATADIR/.config/pulse
+    mount --bind $AH_USERHOME/.config/pulse $AH_DATADIR/.config/pulse # TODO: check if readonly is enough for working sound?
     mount --rbind $AH_DATADIR $AH_USERHOME
-    mount -o remount,nosuid /
+    # TODO: nodev ro tmp
+    mount -o remount,nosuid /  # is this enough?  what if there are suids in a submount? test!
     exec sudo -i -u $AH_USER DBUS_SESSION_BUS_ADDRESS=unix:path=$AH_XDG_RUNTIME_DIR/bus XDG_RUNTIME_DIR=$AH_XDG_RUNTIME_DIR bash
     exit 1
 fi
