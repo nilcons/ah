@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+[[ "${1:-}" ]] || {
+    echo Running environments:
+    ip netns ls | grep sih- | cut -d\  -f1 | cut -d- -f2
+    exit 0
+}
+
+sudo nsenter -t $(ip netns pids sih-$1 | head -n1) -a sudo -u $USER -i
